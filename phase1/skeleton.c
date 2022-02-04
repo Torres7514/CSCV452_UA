@@ -5,10 +5,11 @@
 
    ------------------------------------------------------------------------ */
 #include <stdlib.h>
-#include <strings.h>
+#include <string.h>
 #include <stdio.h>
-#include <phase1.h>
+#include "phase1.h"
 #include "kernel.h"
+#include "usloss.h"
 
 /* ------------------------- Prototypes ----------------------------------- */
 int sentinel (void *);
@@ -58,6 +59,7 @@ void startup()
    ReadyList = NULL;
 
    /* Initialize the clock interrupt handler */
+   int_vec[CLOCK_DEV] = clock_handler
 
    /* startup a sentinel process */
    if (DEBUG && debugflag)
@@ -118,9 +120,19 @@ int fork1(char *name, int (*f)(char *), char *arg, int stacksize, int priority)
       console("fork1(): creating process %s\n", name);
 
    /* test if in kernel mode; halt if in user mode */
-
+   if (PSR_CURRENT_MODE == 0)
+   {
+      console("fork1() in user mode, Halting\n");
+      halt(1);
+   }
    /* Return if stack size is too small */
+   if (stacksize < USLOSS_MIN_STACK)
+   {
+      if (DEBUG && debugflag)
+      console("Stack Size Too Small\n");
 
+      return -2;
+   }
    /* find an empty slot in the process table */
 
    /* fill-in entry in process table */
