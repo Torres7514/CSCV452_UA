@@ -5,19 +5,20 @@
 
    ------------------------------------------------------------------------ */
 #include <stdlib.h>
-#include <strings.h>
+#include <string.h>
 #include <stdio.h>
-#include <phase1.h>
+#include "phase1.h"
 #include "kernel.h"
+#include "usloss.h"
 
 /* ------------------------- Prototypes ----------------------------------- */
-int sentinel (void *);
+int sentinel (char *);
 extern int start1 (char *);
 void dispatcher(void);
 void launch();
 static void enableInterrupts();
 static void check_deadlock();
-
+static void disableInterrupts();
 
 /* -------------------------- Globals ------------------------------------- */
 
@@ -28,6 +29,7 @@ int debugflag = 1;
 proc_struct ProcTable[MAXPROC];
 
 /* Process lists  */
+proc_ptr ReadyList;
 
 /* current process ID */
 proc_ptr Current;
@@ -51,6 +53,20 @@ void startup()
    int result; /* value returned by call to fork1() */
 
    /* initialize the process table */
+   for (i = 1; i <= MAXPROC; i++)
+   {
+      ProcTable[i].next_proc_ptr = NULL;
+      ProcTable[i].child_proc_ptr = NULL;
+      ProcTable[i].next_sibling_ptr = NULL;
+      strcpy(ProcTable[i].name, " ");
+      ProcTable[i].start_arg[0] = '\0';
+      ProcTable[i].pid = -1;
+      ProcTable[i].priority = -1;
+      ProcTable[i].start_func = NULL;
+      ProcTable[i].stack = NULL;
+      ProcTable[i].stacksize = -1;
+      ProcTable[i].status = UNUSED;
+   }
 
    /* Initialize the Ready list, etc. */
    if (DEBUG && debugflag)
@@ -58,6 +74,7 @@ void startup()
    ReadyList = NULL;
 
    /* Initialize the clock interrupt handler */
+   int_vec[CLOCK_DEV] = clock_handler
 
    /* startup a sentinel process */
    if (DEBUG && debugflag)
@@ -113,15 +130,48 @@ void finish()
 int fork1(char *name, int (*f)(char *), char *arg, int stacksize, int priority)
 {
    int proc_slot;
+   int pid_count;
 
    if (DEBUG && debugflag)
       console("fork1(): creating process %s\n", name);
 
    /* test if in kernel mode; halt if in user mode */
+   if ((PSR_CURRENT_MODE & psr_get()) == 0)
+   {
+      console("fork1() in user mode, Halting\n");
+      halt(1);
+   }
+
+
+   disableInterrupts();
 
    /* Return if stack size is too small */
+   if (stacksize < USLOSS_MIN_STACK)
+   {
+      if (DEBUG && debugflag)
+      console("Stack Size Too Small\n");
+
+      return -2;
+   }
 
    /* find an empty slot in the process table */
+   proc_slot = next_pid % MAXPROC;
+   pid_count = 0;
+   while ( pid_count < MAXPROC && ProcTable[proc_slot].status != EMPTY)
+   {
+      next_pid++;
+      proc_slot = next_pid % MAXPROC;
+      pid_count++;
+   }
+
+   /* Return if process table is full */
+   if ( pid_count >= MAXPROC)
+   {
+      enableInterrupts();
+      if (DEBUG && debugflag)
+      console("fork1(): Process Table FULL\n");
+      return -1;
+   }
 
    /* fill-in entry in process table */
    if ( strlen(name) >= (MAXNAME - 1) ) {
@@ -138,6 +188,12 @@ int fork1(char *name, int (*f)(char *), char *arg, int stacksize, int priority)
    }
    else
       strcpy(ProcTable[proc_slot].start_arg, arg);
+
+   ProcTable[proc_slot].pid = next_pid++;
+   ProcTable[proc_slot].stacksize = stacksize;
+   ProcTable[proc_slot].priority = priority;
+   ProcTable[proc_slot].stack = malloc(stacksize);
+   ProcTable[proc_slot].status = READY;
 
    /* Initialize context for this process, but use launch function pointer for
     * the initial value of the process's program counter (PC)
@@ -194,6 +250,7 @@ void launch()
    ------------------------------------------------------------------------ */
 int join(int *code)
 {
+
 } /* join */
 
 
@@ -256,6 +313,7 @@ int sentinel (char * dummy)
 /* check to determine if deadlock has occurred... */
 static void check_deadlock()
 {
+
 } /* check_deadlock */
 
 
