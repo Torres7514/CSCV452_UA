@@ -8,6 +8,7 @@ struct proc_struct {
    proc_ptr       next_proc_ptr;
    proc_ptr       child_proc_ptr;
    proc_ptr       next_sibling_ptr;
+   proc_ptr       quit_child_ptr;
    char           name[MAXNAME];     /* process's name */
    char           start_arg[MAXARG]; /* args passed to process */
    context        state;             /* current context for process */
