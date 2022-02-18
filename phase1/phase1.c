@@ -93,6 +93,7 @@ void startup()
       ProcTable[i].Kids = 0;
       ProcTable[i].CPUtime = -1;
       ProcTable[i].name[0] = '\0';
+      ProcTable[i].quit_child_ptr = NULL;
    } 
 
    /* Initialize the Ready list, etc. */
@@ -358,10 +359,12 @@ int join(int *code)
 {
    /* test if in kernel mode; halt if in user mode */
    check_kernel_mode("join");
+
    /*disable interupts*/
    disableInterrupts();
 
-   if (Current->Kids == 0)
+   /* if current process has no children, return -2 */
+   if (Current->child_proc_ptr == 0)
    {
        enableInterrupts();
        if (DEBUG && debugflag)
@@ -372,17 +375,33 @@ int join(int *code)
    /* Check if child(ren) quit before join() occurred*/
    if (Current->quit_child_ptr == NULL)
    {
-       
+       Current->status = JOIN_BLOCKED;
+       removeRL(Current);
+       if (DEBUG && debugflag) {
+          console("join(): %s is JOIN_BLOCKED\n", Current->name);
+          
+       }
+       dispatcher();
    }
+
+   disableInterrupts();
+
       /* return immediatly*/
       /* return PID of quit child(ren)*/
+      child_PID = child_proc_ptr->pid;
       /* Store child status passed to quit */
+      *code = child->quitStatus
       /* dump child(ren) info in order of their quit */
 
    /* Check if no unjoined child(ren) has quit */
       /* wait */
       /* check if process zapped waiting for child to quit*/
+      if(is_zapped())
+      {
+         return -1;
+      }
          /* return -1*/
+
       /* when quit.. */
       /* return PID of quit child(ren) >= 0*/
       /* Store child status passed to quit */
@@ -581,7 +600,48 @@ void launch()
    Side Effects -
    ----------------------------------------------------------------------- */
 int zap(int pid) {
+   /* check if in kernel mode */
+   check_kernel_mode("zap1");
 
+   if (DEBUG && debugflag) {
+      console("zap(): Process %s is disabling interrupts.\n",
+               Current->name)
+   }
+   disableInterrupts();
+
+   if (Current->pid == pid) {
+      console("zap(): process %s tried to zap itself, Halting...\n", pid);
+      Halt(1);
+
+   }
+
+   if (ProcTable[pid % MAXPROC].status == EMPTY || 
+      ProcTable[pid % MAXPROC].pid != pid) 
+      {
+         console("zap(): Process zapped does not exist, Halting...\n");
+         Halt(1);
+      }
+   if (ProcTable[pid % MAXPROC].status == QUIT)
+   {
+      if (DEBUG && debugflag) {
+         console("zap(): Processes zapped has quit, but waiting\n" "joined\n");
+      }
+      if (is_zapped()) {
+         return -1;
+      }
+   return 0;
+
+   }
+   if (DEBUG && debugflag) {
+      console("zap(): Process %d is zapping process %d.\n", Current->pid, pid);
+
+   }
+   Current->status = ZAP_BLOCKED;
+   removeRL(Current);
+   ZappedList = &ProcTable[pid % MAXPROC];
+   ZappedList->zapped = 1;
+
+   
 } /* zap*/
 
 /* ------------------------------------------------------------------------
@@ -592,7 +652,7 @@ int zap(int pid) {
    Side Effects -
    ----------------------------------------------------------------------- */
 int is_zapped(void) {
-    if (Current->status == ZAP_BLOCK) {
+    if (Current->status == ZAP_BLOCKED) {
         return 1;
     }
     else {
