@@ -25,13 +25,16 @@ void  dispatcher(void);
 void  insertRL(proc_ptr proc);
 void	p1_switch(int old, int new);
 void  launch();
-
+int   block(int);
 int	zap(int pid);
 int	is_zapped(void);
 int	getpid(void);
 void	dump_processes(void);
 int   block_me(int block_status);
 int   read_cur_start_time(void);
+void  cleanProc(int);
+void  clock_handler(int device, int unit);
+
 int   unblock_proc(int pid);
 void  time_slice(void);
 int	readtime(void);
@@ -180,7 +183,7 @@ static void check_deadlock() {
 
    if (proc_count == 1) {
       for (int i = 1; i < MAXPROC; i++) {
-         if (ProcTable[i].status = ZAP_BLOCK || ProcTable[i].status = JOIN_BLOCK) {
+         if (ProcTable[i].status = ZAP_BLOCKED || ProcTable[i].status = JOIN_BLOCKED) {
             ZapBlock_procs_count++;
          }
       }
@@ -392,7 +395,8 @@ int join(int *code)
       /* Store child status passed to quit */
       *code = child->quitStatus
       /* dump child(ren) info in order of their quit */
-
+      removeRL(child_proc_ptr);
+    
    /* Check if no unjoined child(ren) has quit */
       /* wait */
       /* check if process zapped waiting for child to quit*/
@@ -404,6 +408,7 @@ int join(int *code)
 
       /* when quit.. */
       /* return PID of quit child(ren) >= 0*/
+      return child_PID;
       /* Store child status passed to quit */
       /* dump child(ren) info in order of their quit */
 
@@ -474,10 +479,23 @@ void dispatcher(void)
    /* test if in kernel mode; halt if in user mode */
    check_kernel_mode("dispatcher");
 
-   /* insertRL function? */
+   
 
    /* decides which process runs next & execute */
+   if (Current->status == RUNNING || Current->slice_time > TIMESLICE)
+   {
+      Current->status = READY;
+      removeRL(&ReadyList[Current->priority-1], Current);
+      insertRL(&ReadyList[Current->priority-1], Current);
+   }
 
+   for (int i = 0; i < SENTINELPRIORITY; i++)
+   {
+      if(ReadyList[i].size > 0)
+      {
+         next_process = 
+      }
+   }
    /* check if current proc can keep running */
       /* has it been time sliced? */
       /* has it been blocked? */
@@ -727,6 +745,32 @@ void dump_processes(void) {
 } /* dump_processes */
 
 /* ------------------------------------------------------------------------
+   Name - block
+   Purpose - 
+   Parameters - 
+   Returns - 
+   Side Effects -  
+   ----------------------------------------------------------------------- */
+int block(int code)
+{
+   check_kernel_mode;
+   disableInterrupts;
+
+   Current->status = code;
+
+   removeRL(&ReadyList[(Current->priority-1)], Current);
+   insertRL(&BlockedList[Current->priority-1], Current);
+
+   dispatcher();
+
+   if(Current->is_zapped > 0)
+   {
+      return -1;
+   }
+
+   return 0;
+}
+/* ------------------------------------------------------------------------
    Name - block_me
    Purpose - 
    Parameters - 
@@ -740,6 +784,13 @@ int block_me(int block_status) {
    /*disable interupts*/
    disableInterrupts();
 
+   if (block_status < 10) {
+      console("block_status < 10\n");
+      halt(1);
+   }
+
+   return block(block_status)
+
 } /* block_me */
 
 /* ------------------------------------------------------------------------
@@ -751,6 +802,40 @@ int block_me(int block_status) {
    ----------------------------------------------------------------------- */
 int unblock_proc(int pid) {
 
+
+   check_kernel_mode();
+   disableInterrupts();
+
+   /* checks to see PID is within the Process Table ranghe */
+   int i = 0;
+   i = pid % MAXPROC;
+
+   /* checks if process table entry is equal to target process, or if status 
+   has been blocked, or if process is being unblocked */
+   if (ProcTable[i-1].pid != pid || ProcTable[i-1].status <= 10 || Current->pid == pid)
+      return -2;
+
+   /* creates a new process pointer temp */
+   proc_ptr temp;
+
+   /* temp points to target process */
+   temp = &ProcTable[i-1];
+
+   /*temp status is set to READY*/
+   temp->status = READY;
+
+   /* remove temp from blocked list and add to Ready List */
+   insertRL(&ReadyList[temp->priority-1], temp);
+   removeRL(&BlockedList[temp->priority-1], temp);
+
+   /* call dispatcher */
+   dispatcher();
+
+   /* check if target has been zapped */
+   if (Current->is_zapped > 1)
+      return -1;
+   
+   return 0;
 } /* unblock_proc */
 
 /* ------------------------------------------------------------------------
@@ -761,9 +846,27 @@ int unblock_proc(int pid) {
    Side Effects -  
    ----------------------------------------------------------------------- */
 int read_cur_start_time(void) {
-
+   check_kernel_mode();
+   return Current->start_time/1000;
 } /* read_cur_start_time */
 
+/* ------------------------------------------------------------------------
+   Name - clock_handler
+   Purpose - calls time_slice function & keeps track of number of interrupts
+   Parameters - 
+   Returns - 
+   Side Effects -  
+   ----------------------------------------------------------------------- */
+void clock_handler(int device, int unit)
+{
+   static int count 0;
+   count++;
+   if (DEBUG && debugflag)
+   {
+      console("clock_handler(): called %d times\n", count);
+      time_slice();
+   }
+}
 /* ------------------------------------------------------------------------
    Name - time_slice
    Purpose - 
@@ -772,6 +875,19 @@ int read_cur_start_time(void) {
    Side Effects -  
    ----------------------------------------------------------------------- */
 void time_slice(void) {
+   check_kernel_mode();
+   disableInterrupts;
+
+   Current->slice_time = sys_clock() - Current->start_time;
+   if (Current->slice_time > TIMESLICE)
+   {
+      Current->slice_time = 0;
+      dispatcher();
+   }
+   else
+   {
+      enableInterrupts();
+   }
 
 } /* time_slice */
 
@@ -851,6 +967,49 @@ static void check_kernel_mode(char *func_name) {
 } /* check_kernel_mode */
 
 /* <<<<<<<<<<<< FUNCTIONS TO ADD >>>>>>>>>>>>>*/
+
+/* --------------------------------------------------------------------------------
+   Name - cleanProc
+   Purpose - function initilaizes the procTable associated with passed PID.
+   Parameters - PID
+   Returns - Nothing
+   Side Effects -  NONE
+   -------------------------------------------------------------------------------- */
+
+   /* ADD FUNCTIONS HERE */
+
+
+void cleanProc(int pid) 
+{
+    checkForKernelMode("cleanProc()");
+    disableInterrupts();
+
+    int i = pid % MAXPROC;
+
+    ProcTable[i].status = EMPTY;            //set status to be open
+    ProcTable[i].pid = -1;                  //set pid to -1 to show it has not been assigned
+    ProcTable[i].next_proc_ptr = NULL;        //set pointers to null
+    ProcTable[i].next_sibling_ptr = NULL;
+    ProcTable[i].next_dead_sibling_ptr = NULL;
+    ProcTable[i].start_func = NULL;
+    ProcTable[i].priority = -1;
+    ProcTable[i].stack = NULL;
+    ProcTable[i].stacksize =-1;
+    ProcTable[i].parent_ptr = NULL;
+
+    initializeProcQueue(&ProcTable[i].child, CHILDREN);
+    initializeProcQueue(&ProcTable[i].deadChild, DEADCHILDREN);
+    initializeProcQueue(&ProcTable[i].zap, ZAP);
+    
+    ProcTable[i].zapped = 0;
+    ProcTable[i].timeStarted = -1;
+    ProcTable[i].cpuTime = -1;
+    ProcTable[i].sliceTime = 0;
+    ProcTable[i].name[0] = 0;
+
+    Current--;
+    enableInterrupts();
+}
 
 // ADD PROCESS TO LIST
 
