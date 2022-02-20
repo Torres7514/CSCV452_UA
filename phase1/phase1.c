@@ -22,7 +22,9 @@ int	join(int *status);
 void	quit(int status);
 void	p1_quit(int pid);
 void  dispatcher(void);
-void  insertRL(proc_ptr proc);
+static void  insertRL(proc_ptr proc);
+static void  removeRL(proc_ptr proc);
+void  printRL();
 void	p1_switch(int old, int new);
 void  launch();
 int   block(int);
@@ -31,6 +33,9 @@ int	is_zapped(void);
 int	getpid(void);
 void	dump_processes(void);
 int   block_me(int block_status);
+void  add_proc_parent_quit_child(procPtr ptr);
+void  rm_proc_childList(procPtr process);
+void  rm_proc_parent_quitList(procPtr process);
 int   read_cur_start_time(void);
 void  cleanProc(int);
 void  clock_handler(int device, int unit);
@@ -90,13 +95,14 @@ void startup()
       ProcTable[i].child_proc_ptr = NULL;
       ProcTable[i].next_sibling_ptr = NULL;
       ProcTable[i].pid = -1;
-      ProcTable[i].parent = -1;
+      ProcTable[i].parent_ptr = NULL;
       ProcTable[i].priority = -1;
       ProcTable[i].status = EMPTY;
       ProcTable[i].Kids = 0;
       ProcTable[i].CPUtime = -1;
       ProcTable[i].name[0] = '\0';
       ProcTable[i].quit_child_ptr = NULL;
+      ProcTable[i].next_quit_sibling = NULL
    } 
 
    /* Initialize the Ready list, etc. */
@@ -304,6 +310,7 @@ int fork1(char *name, int (*f)(char *), char *arg, int stacksize, int priority)
       ProcTable[proc_slot].Kids = 0;
       ProcTable[proc_slot].Parent = Current->pid;
       ProcTable[proc_slot].zapped = NULL;
+      ProcTable[proc_slot].nextZapped = NULL;
       ProcTable[proc_slot].quit = NULL;
       ProcTable[proc_slot].CPUtime = NULL;
 
@@ -509,7 +516,7 @@ void dispatcher(void)
 /* ------------------------------------------------------------------------
    Name - insertRL
    Purpose - 
-   Parameters - 
+   Parameters -       CHECK TO SEE IT WORKS
    Returns - 
    Side Effects -  
    ----------------------------------------------------------------------- */
@@ -540,7 +547,7 @@ static void insertRL(proc_ptr proc) {
    Returns -
    Side Effects -
    ----------------------------------------------------------------------- */
-static void insertRL(proc_ptr proc) {
+static void removeRL(proc_ptr proc) {
     proc_ptr walker; // pointers to PCB
     if (proc == ReadyList)
     {
@@ -557,6 +564,35 @@ static void insertRL(proc_ptr proc) {
     }
     return;
 } /* removeRL */
+
+/*---------------------------- printReadyList -----------------------
+|  Function printRL
+|
+|  Purpose:  Prints a string representation of the ready list using
+|            the console containing name, priority of process,
+|            and process ID. Debugging must be enable.
+|
+|  Parameters:  None
+|
+|  Returns:  None
+*-------------------------------------------------------------------*/
+void printRL(){
+    char str[10000], str1[40];
+    
+    procPtr head = ReadyList;
+    
+    sprintf(str, "%s(%d:PID=%d)", head->name, head->priority, head->pid);
+
+    while (head->next_proc_ptr != NULL) {
+        head = head->next_proc_ptr;
+        sprintf(str1, " -> %s(%d:PID=%d)", head->name, head->priority, 
+                head->pid);
+        strcat(str, str1);
+    }
+    if (DEBUG && debugflag){
+      console("printReadyList(): %s\n", str);
+    }
+} /* printRL */
 
 /* ------------------------------------------------------------------------
    Name - p1_switch
@@ -772,10 +808,10 @@ int block(int code)
 }
 /* ------------------------------------------------------------------------
    Name - block_me
-   Purpose - 
+   Purpose - blocks a process and removes from ReadyList
    Parameters - 
    Returns - 
-   Side Effects -  
+   Side Effects -  process is changed, removed from ReadyList
    ----------------------------------------------------------------------- */
 int block_me(int block_status) {
    /* test if in kernel mode; halt if in user mode */
@@ -793,12 +829,99 @@ int block_me(int block_status) {
 
 } /* block_me */
 
+/*------------------------------------------------------------------
+|  Function rm_proc_childList
+|
+|  Purpose:  Finds process in parent's childlist, removes process, 
+|            reassigns all important processes
+|
+|  Parameters:
+|            procPtr process, process to be deleted     
+|
+|  Returns:  void
+|
+|  Side Effects:  Process is removed from parent's childList
+*-------------------------------------------------------------------*/
+void rm_proc_childList(procPtr process) {
+    procPtr walker = process;
+    // process is at the head of the linked list
+    if (process == process->parentPtr->childProcPtr) {
+        process->parentPtr->childProcPtr = process->nextSiblingPtr;
+    } else { // process is in the middle or end of linked list
+        walker = process->parent_ptr->child_proc_ptr;
+        while (walker->next_sibling_ptr != process) {
+            walker = walker->next_sibling_ptr;
+        }
+        walker->next_sibling_ptr = walker->next_sibling_ptr->next_sibling_ptr;
+    }
+    if (DEBUG && debugflag) {
+       console("removeFromChildList(): Process %d removed.\n", 
+                      walker->pid);
+    }
+}/* rm_proc_childList */
+
+/*------------------------------------------------------------------
+|  Function add_proc_parent_quit_child
+|
+|  Purpose:  Adds a process to it's parent's quit child list
+|
+|  Parameters:                            
+|            procPtr ptr - the parent process to add the child to
+|
+|  Returns:  void
+|
+|  Side Effects: the process is added back of the quit child list
+*-------------------------------------------------------------------*/
+void add_proc_parent_quit_child(procPtr ptr) {
+    if (ptr->quit_child_ptr == NULL) {
+        ptr->quit_child_ptr = Current;
+        return;
+    }
+    procPtr child = ptr->quit_child_ptr;
+    while (child->next_quit_sibling != NULL) {
+        child = child->next_quit_sibling;
+    }
+    child->next_quit_sibling = Current;
+}/* add_proc_parent_quit_child */
+
+/*
+ * Returns the pid of the current process
+ */
+int getpid(){
+    return Current->pid;
+}
+
+/*
+ * Returns the start time of the current process
+ */
+int readCurStartTime() {
+    return Current->startTime;
+}
+
+/*
+ * Calls dispatcher if a process has been time sliced
+ */
+void timeSlice() {
+    if (readtime() >= TIME_SLICE) {
+        dispatcher();
+    }
+    return;
+}
+
+/*
+ * Returns the difference between the current process's start time and
+ * the USLOSS clock
+ */
+int readtime() {
+    return USLOSS_Clock() - readCurStartTime();
+}
+
 /* ------------------------------------------------------------------------
    Name - unblock_proc
-   Purpose - 
+   Purpose - unblocks process blocked by blockMe
    Parameters - 
    Returns - 
-   Side Effects -  
+   Side Effects -  process is changed, added back to ReadyList
    ----------------------------------------------------------------------- */
 int unblock_proc(int pid) {
 
@@ -815,18 +938,18 @@ int unblock_proc(int pid) {
    if (ProcTable[i-1].pid != pid || ProcTable[i-1].status <= 10 || Current->pid == pid)
       return -2;
 
-   /* creates a new process pointer temp */
-   proc_ptr temp;
+   /* creates a new process pointer walker */
+   proc_ptr walker;
 
-   /* temp points to target process */
-   temp = &ProcTable[i-1];
+   /* walker points to target process */
+   walker = &ProcTable[i-1];
 
-   /*temp status is set to READY*/
-   temp->status = READY;
+   /*walker status is set to READY*/
+   walker->status = READY;
 
-   /* remove temp from blocked list and add to Ready List */
-   insertRL(&ReadyList[temp->priority-1], temp);
-   removeRL(&BlockedList[temp->priority-1], temp);
+   /* remove walker from blocked list and add to Ready List */
+   insertRL(&ReadyList[walker->priority-1], temp);
+   removeRL(&BlockedList[walker->priority-1], temp);
 
    /* call dispatcher */
    dispatcher();
@@ -837,6 +960,31 @@ int unblock_proc(int pid) {
    
    return 0;
 } /* unblock_proc */
+
+/*------------------------------------------------------------------
+|  Function rm_proc_parent_quitList
+|
+|  Purpose: Removes process from parent's quit list 
+|
+|  Parameters:                                           
+|            procPtr process, process to be removed
+|
+|  Returns:  void
+|
+|  Side Effects:  Process is removed from parent's quitList
+*-------------------------------------------------------------------*/
+void rm_proc_parent_quitList(procPtr process) {
+    process->parent_ptr->quit_child_ptr = process->next_quit_sibling;
+
+    if (DEBUG && debugflag) {
+       USLOSS_Console("removeFromQuitList(): Process %d removed.\n", 
+                      process->pid);
+    }
+}/* rm_proc_parent_quitList */
+
+void clock_handler() {
+    timeSlice();
+}
 
 /* ------------------------------------------------------------------------
    Name - read_cur_start_time
@@ -859,7 +1007,7 @@ int read_cur_start_time(void) {
    ----------------------------------------------------------------------- */
 void clock_handler(int device, int unit)
 {
-   static int count 0;
+   static int count = 0;
    count++;
    if (DEBUG && debugflag)
    {
@@ -968,52 +1116,34 @@ static void check_kernel_mode(char *func_name) {
 
 /* <<<<<<<<<<<< FUNCTIONS TO ADD >>>>>>>>>>>>>*/
 
-/* --------------------------------------------------------------------------------
-   Name - cleanProc
-   Purpose - function initilaizes the procTable associated with passed PID.
-   Parameters - PID
-   Returns - Nothing
-   Side Effects -  NONE
-   -------------------------------------------------------------------------------- */
-
-   /* ADD FUNCTIONS HERE */
-
-
-void cleanProc(int pid) 
-{
-    checkForKernelMode("cleanProc()");
-    disableInterrupts();
-
-    int i = pid % MAXPROC;
-
-    ProcTable[i].status = EMPTY;            //set status to be open
-    ProcTable[i].pid = -1;                  //set pid to -1 to show it has not been assigned
-    ProcTable[i].next_proc_ptr = NULL;        //set pointers to null
-    ProcTable[i].next_sibling_ptr = NULL;
-    ProcTable[i].next_dead_sibling_ptr = NULL;
-    ProcTable[i].start_func = NULL;
-    ProcTable[i].priority = -1;
-    ProcTable[i].stack = NULL;
-    ProcTable[i].stacksize =-1;
-    ProcTable[i].parent_ptr = NULL;
-
-    initializeProcQueue(&ProcTable[i].child, CHILDREN);
-    initializeProcQueue(&ProcTable[i].deadChild, DEADCHILDREN);
-    initializeProcQueue(&ProcTable[i].zap, ZAP);
-    
-    ProcTable[i].zapped = 0;
-    ProcTable[i].timeStarted = -1;
-    ProcTable[i].cpuTime = -1;
-    ProcTable[i].sliceTime = 0;
-    ProcTable[i].name[0] = 0;
-
-    Current--;
-    enableInterrupts();
-}
 
 // ADD PROCESS TO LIST
 
 // UPDATE GLOBAL PROCESS COUNT
+
+/*------------------------------------------------------------------
+|  Function unblock_zapped
+|
+|  Purpose:  Unblocks all processes that zapped a process.
+|  
+|  Parameters:
+|            procPtr ptr - head of linked list of processes that zapped
+|                          the calling process.
+|
+|  Returns:  void
+|
+|  Side Effects:  Process status is set to READY and process is added
+|                 to the ready list.
+*-------------------------------------------------------------------*/
+void unblock_zapped(procPtr ptr) {
+    if (ptr == NULL) {
+        return;
+    }
+    unblock_zapped(ptr->nextZapped);
+    ptr->status = READY;
+    insertRL(ptr);
+} /* unblockZappers */
+
 /* --------------------------------------------------------------------------------
    Name - proc_count_Update
    Purpose - To keep track of the number of processes in the process table
