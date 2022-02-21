@@ -914,7 +914,7 @@ int block_me(int block_status) {
 |
 |  Side Effects:  Process is removed from parent's childList
 *-------------------------------------------------------------------*/
-void rm_proc_childList(proc_ptr process) {
+void rm_proc_childList(proc_ptr proc) {
     procPtr walker = process;
     // process is at the head of the linked list
     if (process == process->parentPtr->childProcPtr) {
@@ -1045,7 +1045,7 @@ int unblock_proc(int pid) {
 |
 |  Side Effects:  Process is removed from parent's quitList
 *-------------------------------------------------------------------*/
-void rm_proc_parent_quitList(proc_ptr process) {
+void rm_proc_parent_quitList(proc_ptr proc) {
     process->parent->quit_child_ptr = process->next_quit_sibling;
 
     if (DEBUG && debugflag) {
@@ -1065,7 +1065,8 @@ void clock_handler() {
    Returns - 
    Side Effects -  
    ----------------------------------------------------------------------- */
-int read_cur_start_time(void) {
+int read_cur_start_time(void) 
+{
    check_kernel_mode();
    return Current->start_time/1000;
 } /* read_cur_start_time */
@@ -1094,7 +1095,8 @@ void clock_handler(int device, int unit)
    Returns - 
    Side Effects -  
    ----------------------------------------------------------------------- */
-void time_slice(void) {
+void time_slice(void) 
+{
    check_kernel_mode();
    disableInterrupts;
 
@@ -1118,7 +1120,8 @@ void time_slice(void) {
    Returns - 
    Side Effects -  
    ----------------------------------------------------------------------- */
-int readtime(void) {
+int readtime(void) 
+{
 
 } /* readtime */
 
@@ -1148,7 +1151,8 @@ void disableInterrupts()
    Returns - nothing
    Side Effects -  if system is in usermode, print appropriate error and halt.
    -------------------------------------------------------------------------------- */
-void enableInterrupts() {
+void enableInterrupts() 
+{
    /* turn the interrupts OFF iff we are in kernel mode */
   if((PSR_CURRENT_MODE & psr_get()) == 0) {
     //not in kernel mode
@@ -1167,7 +1171,8 @@ void enableInterrupts() {
    Returns - nothing
    Side Effects -  if system is in usermode, print appropriate error and halt.
    -------------------------------------------------------------------------------- */
-static void check_kernel_mode(char *func_name) {
+static void check_kernel_mode(char *func_name) 
+{
    union psr_values caller_psr;  /*Holds the caller's PSR values*/
    char buffer[200];
 
@@ -1247,7 +1252,8 @@ void unblock_zapped(proc_ptr ptr) {
    Side Effects -  Increments the count of processes in the table when called, 
                      and there are new processes.
    -------------------------------------------------------------------------------- */
-void proc_count_Update() {
+void proc_count_Update() 
+{
    /* loop index*/
    int i = 0;
 
