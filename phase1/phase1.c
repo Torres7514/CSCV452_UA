@@ -634,20 +634,23 @@ static void removeRL(proc_ptr proc) {
 |
 |  Returns:  None
 *-------------------------------------------------------------------*/
-void printRL(){
+void printRL()
+{
     char str[10000], str1[40];
     
     procPtr head = ReadyList;
     
     sprintf(str, "%s(%d:PID=%d)", head->name, head->priority, head->pid);
 
-    while (head->next_proc_ptr != NULL) {
+    while (head->next_proc_ptr != NULL) 
+    {
         head = head->next_proc_ptr;
         sprintf(str1, " -> %s(%d:PID=%d)", head->name, head->priority, 
                 head->pid);
         strcat(str, str1);
     }
-    if (DEBUG && debugflag){
+    if (DEBUG && debugflag)
+    {
       console("printReadyList(): %s\n", str);
     }
 } /* printRL */
@@ -715,13 +718,15 @@ int zap(int pid) {
    /* check if in kernel mode */
    check_kernel_mode("zap1");
 
-   if (DEBUG && debugflag) {
+   if (DEBUG && debugflag) 
+   {
       console("zap(): Process %s is disabling interrupts.\n",
                Current->name)
    }
    disableInterrupts();
 
-   if (Current->pid == pid) {
+   if (Current->pid == pid) 
+   {
       console("zap(): process %s tried to zap itself, Halting...\n", pid);
       Halt(1);
 
@@ -735,19 +740,23 @@ int zap(int pid) {
       }
    if (ProcTable[pid % MAXPROC].status == QUIT)
    {
-      if (DEBUG && debugflag) {
+      if (DEBUG && debugflag) 
+      {
          console("zap(): Processes zapped has quit, but waiting\n" "joined\n");
       }
-      if (is_zapped()) {
+      if (is_zapped()) 
+      {
          return -1;
       }
    return 0;
 
    }
-   if (DEBUG && debugflag) {
+   if (DEBUG && debugflag) 
+   {
       console("zap(): Process %d is zapping process %d.\n", Current->pid, pid);
 
    }
+
    Current->status = ZAP_BLOCKED;
    removeRL(Current);
    ZappedList = &ProcTable[pid % MAXPROC];
@@ -763,11 +772,14 @@ int zap(int pid) {
    Returns -
    Side Effects -
    ----------------------------------------------------------------------- */
-int is_zapped(void) {
-    if (Current->status == ZAP_BLOCKED) {
+int is_zapped(void) 
+{
+    if (Current->status == ZAP_BLOCKED)
+    {
         return 1;
     }
-    else {
+    else 
+    {
         return 0;
     }
 } /* is_zapped */
@@ -779,7 +791,8 @@ int is_zapped(void) {
    Returns - PID number
    Side Effects - NONE
    ----------------------------------------------------------------------- */
-int getpid(void) {
+int getpid(void) 
+{
     /* Check if we ar in kernel mode*/
     check_kernel_mode("getpid");
 
@@ -793,7 +806,8 @@ int getpid(void) {
    Returns -
    Side Effects -
    ----------------------------------------------------------------------- */
-void dump_processes(void) {
+void dump_processes(void) 
+{
     char* ready = "READY";
     char* running = "RUNNING";
     char* blocked = "BLOCKED";
