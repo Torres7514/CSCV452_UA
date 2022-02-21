@@ -31,13 +31,13 @@ int   block(int);
 int	zap(int pid);
 int	is_zapped(void);
 int	getpid(void);
+void  cleanProcStruct(int pid)
 void	dump_processes(void);
 int   block_me(int block_status);
 void  add_proc_parent_quit_child(procPtr ptr);
 void  rm_proc_childList(procPtr process);
 void  rm_proc_parent_quitList(procPtr process);
 int   read_cur_start_time(void);
-void  cleanProc(int);
 void  clock_handler(int device, int unit);
 
 int   unblock_proc(int pid);
@@ -95,7 +95,7 @@ void startup()
       ProcTable[i].child_proc_ptr = NULL;
       ProcTable[i].next_sibling_ptr = NULL;
       ProcTable[i].pid = -1;
-      ProcTable[i].parent_ptr = NULL;
+      ProcTable[i].parent = NULL;
       ProcTable[i].priority = -1;
       ProcTable[i].status = EMPTY;
       ProcTable[i].Kids = 0;
@@ -367,6 +367,7 @@ void	p1_fork(int pid) {
    ------------------------------------------------------------------------ */
 int join(int *code)
 {
+   int child_PID = -3;
    /* test if in kernel mode; halt if in user mode */
    check_kernel_mode("join");
 
@@ -389,7 +390,8 @@ int join(int *code)
        removeRL(Current);
        if (DEBUG && debugflag) {
           console("join(): %s is JOIN_BLOCKED\n", Current->name);
-          
+          dump_processes();
+          printRL();
        }
        dispatcher();
    }
@@ -397,12 +399,20 @@ int join(int *code)
    disableInterrupts();
 
       /* return immediatly*/
+      child = Current->quit_child_ptr;
+      if (DEBUG && debugflag)
+      {
+         console("join(): Child %d has status of quit.\n", child->name);
+         dump_processes();
+         printRL();
+      }
       /* return PID of quit child(ren)*/
       child_PID = child_proc_ptr->pid;
       /* Store child status passed to quit */
       *code = child->quitStatus
       /* dump child(ren) info in order of their quit */
-      removeRL(child_proc_ptr);
+      rm_proc_parent_quitList(child_proc_ptr);
+      cleanProcStruct(child_PID);
     
    /* Check if no unjoined child(ren) has quit */
       /* wait */
@@ -432,6 +442,8 @@ int join(int *code)
    ------------------------------------------------------------------------ */
 void quit(int code)
 {
+   int currentPID;
+
    /* test if in kernel mode; halt if in user mode */
    check_kernel_mode("quit");
    
@@ -439,21 +451,65 @@ void quit(int code)
    disableInterrupts();
 
    /* halt if process calls quit with active child(ren)*/
-   if (Current->kids > 0) {
+   if (Current->child_proc_ptr > 0) {
       console("quit(): The parent has active children. Halting..\n");
       halt(1);
    }
    else {
-      Current->status = QUIT;
+      Current->code = QUIT;
+      removeRL(current);
    }
    /* cleanup proc table*/
-      /* parent already preformed join() */
-      /* parent has not done a join() */
-   /* unlock zapped processes */
-   /* child(ren) have quit that have and will not join() */
-      /* no error */
+   if (is_zapped())
+   {
+      unblock_zapped(Current->nextzapped);
+   }
+   
+   if (Current->Parent != NULL && Curent->quit_child_ptr != NULL)
+   {
+      while (Current->quit_child_ptr != NULL)
+      {
+         int child_PID = Current->quit_child_ptr->pid;
+         rm_proc_parent_quitList(Current->quit_child_ptr->pid);
+         cleanProcStruct(childPID);
+      }
 
-   p1_quit(Current->pid);
+      Current->Parent->code = READY;
+      rm_proc_childList(Current);
+      add_proc_parent_quit_child(CUrrent->Parent);
+      insertRL();
+      printRL();
+      currentPID = Current->pid;
+
+
+   } else if (Current->Parent != NULL)
+   {
+      add_proc_parent_quit_child(Current->Parent);
+      rm_proc_childList(Current->Parent);
+      if(Current->Parent->code == JOIN_BLOCKED)
+      {
+         insertRL(Current->Parent);
+         Current->Parent->code = READY;
+      }
+      printRL();
+
+   } else {
+      while (Current->quit_child_ptr != NULL)
+      {
+         int child_PID = Current->quit_child_ptr->pid;
+         rm_proc_parent_quitList(Current->quit_child_ptr);
+         cleanProcStruct(child_PID);
+      }
+      currentPID = Current->pid;
+      cleanProcStruct(Current->pid);
+   }
+   p1_quit(currentPID);
+   if (DEBUG && debugflag)
+   {
+      dump_processes();
+   }
+   dispatcher();
+
 } /* quit */
 
 /* ------------------------------------------------------------------------
@@ -846,7 +902,7 @@ void rm_proc_childList(procPtr process) {
     procPtr walker = process;
     // process is at the head of the linked list
     if (process == process->parentPtr->childProcPtr) {
-        process->parentPtr->childProcPtr = process->nextSiblingPtr;
+        process->parent->childProcPtr = process->nextSiblingPtr;
     } else { // process is in the middle or end of linked list
         walker = process->parent_ptr->child_proc_ptr;
         while (walker->next_sibling_ptr != process) {
@@ -974,7 +1030,7 @@ int unblock_proc(int pid) {
 |  Side Effects:  Process is removed from parent's quitList
 *-------------------------------------------------------------------*/
 void rm_proc_parent_quitList(procPtr process) {
-    process->parent_ptr->quit_child_ptr = process->next_quit_sibling;
+    process->parent->quit_child_ptr = process->next_quit_sibling;
 
     if (DEBUG && debugflag) {
        USLOSS_Console("removeFromQuitList(): Process %d removed.\n", 
@@ -1119,7 +1175,30 @@ static void check_kernel_mode(char *func_name) {
 
 // ADD PROCESS TO LIST
 
-// UPDATE GLOBAL PROCESS COUNT
+/* --------------------------------------------------------------------------------
+   Name - cleanProcStruct
+   Purpose - initializes the ProcStruct. Either set to 0, NULL, or -1.
+   Parameters - Nothing
+   Returns - Nothing
+   Side Effects -  Members of ProcStruct pid are changed
+   -------------------------------------------------------------------------------- */
+void cleanProcStruct(int pid)
+{
+   int i = pid % MAXPROC;
+   ProcTable[i].next_proc_ptr = NULL;
+   ProcTable[i].child_proc_ptr = NULL;
+   ProcTable[i].next_sibling_ptr = NULL;
+   ProcTable[i].pid = -1;
+   ProcTable[i].parent = NULL;
+   ProcTable[i].priority = -1;
+   ProcTable[i].status = EMPTY;
+   ProcTable[i].Kids = 0;
+   ProcTable[i].CPUtime = -1;
+   ProcTable[i].name[0] = '\0';
+   ProcTable[i].quit_child_ptr = NULL;
+   ProcTable[i].next_quit_sibling = NULL
+} /*cleanProcStruct */
+
 
 /*------------------------------------------------------------------
 |  Function unblock_zapped
