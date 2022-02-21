@@ -11,7 +11,7 @@ CFLAGS = -Wall -g -I${INCLUDE} -I.
 UNAME := $(shell uname -s)
 
 ifeq ($(UNAME), Darwin)
-	CFLAGS += -D_XOPEN_SOURCE
+#	CFLAGS += -D_XOPEN_SOURCE
 endif
 
 LDFLAGS = -L. -L./usloss/lib
