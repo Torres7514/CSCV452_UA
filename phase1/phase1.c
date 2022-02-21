@@ -578,7 +578,7 @@ void dispatcher(void)
    Returns - 
    Side Effects -  
    ----------------------------------------------------------------------- */
-static void insertRL(proc_ptr proc) {
+void insertRL(proc_ptr proc) {
    proc_ptr walker, previous; // pointers to PCB
    previous = NULL;
    walker = ReadyList;
@@ -605,7 +605,7 @@ static void insertRL(proc_ptr proc) {
    Returns -
    Side Effects -
    ----------------------------------------------------------------------- */
-static void removeRL(proc_ptr proc) {
+void removeRL(proc_ptr proc) {
     proc_ptr walker; // pointers to PCB
     if (proc == ReadyList)
     {
@@ -914,7 +914,7 @@ int block_me(int block_status) {
 |
 |  Side Effects:  Process is removed from parent's childList
 *-------------------------------------------------------------------*/
-void rm_proc_childList(procPtr process) {
+void rm_proc_childList(proc_ptr process) {
     procPtr walker = process;
     // process is at the head of the linked list
     if (process == process->parentPtr->childProcPtr) {
@@ -944,7 +944,7 @@ void rm_proc_childList(procPtr process) {
 |
 |  Side Effects: the process is added back of the quit child list
 *-------------------------------------------------------------------*/
-void add_proc_parent_quit_child(procPtr ptr) {
+void add_proc_parent_quit_child(proc_ptr ptr) {
     if (ptr->quit_child_ptr == NULL) {
         ptr->quit_child_ptr = Current;
         return;
@@ -1045,7 +1045,7 @@ int unblock_proc(int pid) {
 |
 |  Side Effects:  Process is removed from parent's quitList
 *-------------------------------------------------------------------*/
-void rm_proc_parent_quitList(procPtr process) {
+void rm_proc_parent_quitList(proc_ptr process) {
     process->parent->quit_child_ptr = process->next_quit_sibling;
 
     if (DEBUG && debugflag) {
@@ -1230,7 +1230,7 @@ void cleanProcStruct(int pid)
 |  Side Effects:  Process status is set to READY and process is added
 |                 to the ready list.
 *-------------------------------------------------------------------*/
-void unblock_zapped(procPtr ptr) {
+void unblock_zapped(proc_ptr ptr) {
     if (ptr == NULL) {
         return;
     }
@@ -1247,7 +1247,7 @@ void unblock_zapped(procPtr ptr) {
    Side Effects -  Increments the count of processes in the table when called, 
                      and there are new processes.
    -------------------------------------------------------------------------------- */
-static void proc_count_Update() {
+void proc_count_Update() {
    /* loop index*/
    int i = 0;
 

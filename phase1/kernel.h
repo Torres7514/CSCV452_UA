@@ -9,6 +9,11 @@ struct proc_struct {
    proc_ptr       child_proc_ptr;
    proc_ptr       next_sibling_ptr;
    proc_ptr       quit_child_ptr;
+   proc_ptr       next_quit_sibling;
+   proc_ptr       parent;
+   proc_ptr       Parent;
+   int            Kids;
+   int            CPUtime;
    char           name[MAXNAME];     /* process's name */
    char           start_arg[MAXARG]; /* args passed to process */
    context        state;             /* current context for process */
