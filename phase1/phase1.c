@@ -535,38 +535,40 @@ void	p1_quit(int pid) {
    ----------------------------------------------------------------------- */
 void dispatcher(void)
 {
-   proc_ptr next_process;
-
    enableInterrupts();
 
    /* test if in kernel mode; halt if in user mode */
    check_kernel_mode("dispatcher");
 
-   
-
    /* decides which process runs next & execute */
-   if (Current->status == RUNNING || Current->slice_time > TIMESLICE)
+   if (Current == NULL)
    {
-      Current->status = READY;
-      removeRL(&ReadyList[Current->priority-1], Current);
-      insertRL(&ReadyList[Current->priority-1], Current);
-   }
-
-   for (int i = 0; i < SENTINELPRIORITY; i++)
-   {
-      if(ReadyList[i].size > 0)
+      Current = ReadyList;
+      if (DEBUG && debugflag)
       {
-         next_process = 
+         console("dispacther(): dispacthed %s.\n", Current->name);
       }
-   }
-   /* check if current proc can keep running */
-      /* has it been time sliced? */
-      /* has it been blocked? */
-      /* is it highest priority in ready list? */
-   
-   /* context_switch(context *old, context *new); */
+      Current->CPUtime = USLOSS_Clock();
+   } else {
+      procPtr old = Current;
+      if (old->status == RUNNING)
+      {
+         old->status = READY;
+      }
+      Current = ReadyList;
+      removeRL(Current);
+      Curent->status = RUNNING;
+      insertRL(Current);
 
-   p1_switch(Current->pid, next_process->pid);
+      Current->CPUtime = USLOSS_Clock();
+
+      p1_switch(Current->pid, next_process->pid);
+
+      enableInterrupts();
+   }
+
+   dump_processes();
+   
 } /* dispatcher */
 
 /* ------------------------------------------------------------------------
